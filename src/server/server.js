@@ -387,7 +387,6 @@ app.post('/api/rooms', apiLimiter, async (req, res) => {
   res.json({roomCode});
 });
 
-
 // Добавляем роут для проверки активности сессии
 app.get('/api/check-session', async (req, res) => {
   const token = req.headers.authorization.split(' ')[1]; // Извлекаем токен из заголовка
