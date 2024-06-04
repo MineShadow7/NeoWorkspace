@@ -82,6 +82,7 @@ wss.on('connection', ((ws, req) => {
   }
 }));
 
+
 const pool = new Pool({
   host: 'localhost',
   port: 5432,
@@ -173,12 +174,14 @@ async function createTables() {
 `);
 
     await client.query(`
-  CREATE TABLE IF NOT EXISTS room_users (
-    roomID VARCHAR(255) REFERENCES rooms(roomID),
-    userID INTEGER REFERENCES users(id),
-    PRIMARY KEY (roomID, userID)
-  );
-`);
+      CREATE TABLE IF NOT EXISTS room_users (
+                                userId INT,
+                                roomId VARCHAR(255),
+                                PRIMARY KEY (userId, roomId),
+                                FOREIGN KEY (userId) REFERENCES users(id),
+                                FOREIGN KEY (roomId) REFERENCES rooms(roomID)
+      );
+    `);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS project_stages (
@@ -383,8 +386,45 @@ app.post('/api/rooms', apiLimiter, async (req, res) => {
   await client.query('INSERT INTO rooms (roomID, roomCode, teacherID, projectName) VALUES ($1, $2, $3, $4)', [roomID, roomCode, userId, projectName]);
   client.release();
 
-  // Respond with the room ID
+  // Добавляем Преподавателя в room_users
+  await client.query('INSERT INTO room_users (userId, roomId) VALUES ($1, $2)', [userId, roomID]);
+
+  // Ответ в виде ID комнаты
   res.json({roomCode});
+});
+
+app.get('/api/rooms/:roomCode', async (req, res) => {
+  const { roomCode } = req.params;
+  try {
+    const client = await pool.connect();
+    const room = await client.query('SELECT * FROM rooms WHERE roomCode = $1', [roomCode]);
+    client.release();
+    if (room.rows.length === 0) {
+      return res.status(404).json({ message: 'Room not found.' });
+    }
+    res.json(room.rows[0]);
+  } catch (e) {
+    console.error('Error fetching room: ', e);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
+app.get('/api/rooms/:roomCode/users', async (req, res) => {
+  const { roomCode } = req.params;
+  try {
+    const client = await pool.connect();
+    const users = await client.query('SELECT * FROM room_users WHERE roomId = $1', [roomCode]);
+    console.log("roomCode ", roomCode);
+    console.log("Users ", users);
+    client.release();
+    if (users.rows.length === 0) {
+      return res.status(404).json({ message: 'No users found.' });
+    }
+    res.json(users.rows);
+  } catch (e) {
+    console.error('Error fetching users: ', e);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
 });
 
 // Добавляем роут для проверки активности сессии
